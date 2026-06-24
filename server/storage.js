@@ -1,101 +1,27 @@
 /**
  * 数据持久化模块
- * 负责读写 status.json 文件，存储模型检测结果
+ * 负责存储模型检测结果到 SQLite 数据库
  * 使用批次（batch）对齐的时间轴结构
  */
 
-const fs = require('fs');
-const path = require('path');
+const db = require('./database');
 
-const DATA_DIR = path.join(__dirname, 'data');
-const STATUS_FILE = path.join(DATA_DIR, 'status.json');
-
-/**
- * 确保数据目录存在
- */
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-/**
- * 读取状态数据
- * @returns {Object} 包含批次列表和模型数据的对象
- */
-function readStatus() {
-  ensureDataDir();
-
-  if (!fs.existsSync(STATUS_FILE)) {
-    return {
-      lastUpdate: null,
-      batches: [],      // 批次列表 [{id, timestamp, modelIds}]
-      models: {}        // 模型数据 {modelId: {id, results: {batchId: {success, latency, error}}}}
-    };
-  }
-
-  try {
-    const data = fs.readFileSync(STATUS_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('读取状态文件失败:', error.message);
-    return {
-      lastUpdate: null,
-      batches: [],
-      models: {}
-    };
-  }
-}
-
-/**
- * 写入状态数据
- * @param {Object} data - 要保存的数据对象
- */
-function writeStatus(data) {
-  ensureDataDir();
-
-  try {
-    fs.writeFileSync(STATUS_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (error) {
-    console.error('写入状态文件失败:', error.message);
-  }
-}
+// 初始化数据库
+db.initDatabase();
 
 /**
  * 创建新批次
- * @param {Array} modelIds - 本批次要检测的模型 ID 列表
+ * @param {Array} modelIds - 本批次要检测的模型 ID 列表（兼容参数，实际不使用）
  * @returns {string} 批次 ID
  */
-function createBatch(modelIds) {
-  const data = readStatus();
+function createBatch(modelIds = []) {
   const batchId = `batch-${Date.now()}`;
   const timestamp = Date.now();
 
-  // 添加新批次
-  data.batches.push({
-    id: batchId,
-    timestamp: timestamp,
-    modelIds: modelIds
-  });
+  // 创建批次记录
+  db.createBatch(batchId, timestamp);
 
-  // 清理过期批次（保留最近 N 小时）
-  const historyHours = parseInt(process.env.HISTORY_HOURS) || 24;
-  const cutoffTime = Date.now() - historyHours * 60 * 60 * 1000;
-  data.batches = data.batches.filter(batch => batch.timestamp > cutoffTime);
-
-  // 初始化本批次的所有模型（如果还不存在）
-  modelIds.forEach(modelId => {
-    if (!data.models[modelId]) {
-      data.models[modelId] = {
-        id: modelId,
-        results: {}
-      };
-    }
-  });
-
-  data.lastUpdate = timestamp;
-  writeStatus(data);
-
+  console.log(`创建批次: ${batchId}`);
   return batchId;
 }
 
@@ -106,42 +32,8 @@ function createBatch(modelIds) {
  * @param {Object} result - 检测结果 { success, latency, error, timestamp }
  */
 function updateModelResult(batchId, modelId, result) {
-  const data = readStatus();
-
-  // 确保批次存在，如果不存在则创建
-  let batch = data.batches.find(b => b.id === batchId);
-  if (!batch) {
-    batch = {
-      id: batchId,
-      timestamp: result.timestamp,
-      modelIds: []
-    };
-    data.batches.push(batch);
-  }
-
-  // 将模型添加到批次的模型列表（如果还没有）
-  if (!batch.modelIds.includes(modelId)) {
-    batch.modelIds.push(modelId);
-  }
-
-  // 确保模型存在
-  if (!data.models[modelId]) {
-    data.models[modelId] = {
-      id: modelId,
-      results: {}
-    };
-  }
-
-  // 存储本批次的检测结果
-  data.models[modelId].results[batchId] = {
-    success: result.success,
-    latency: result.latency,
-    error: result.error || null,
-    timestamp: result.timestamp
-  };
-
-  data.lastUpdate = Date.now();
-  writeStatus(data);
+  // 直接写入数据库
+  db.upsertResult(batchId, modelId, result);
 }
 
 /**
@@ -149,11 +41,67 @@ function updateModelResult(batchId, modelId, result) {
  * @returns {Object} 包含批次和模型状态的对象
  */
 function getAllStatus() {
-  return readStatus();
+  // 从数据库读取所有批次
+  const batches = db.getAllBatches();
+
+  // 构建批次列表（保持原有结构）
+  const batchList = batches.map(batch => ({
+    id: batch.id,
+    timestamp: batch.timestamp,
+    modelIds: db.getModelIdsByBatch(batch.id)
+  }));
+
+  // 获取所有模型 ID
+  const modelIds = db.getAllModelIds();
+
+  // 构建模型数据
+  const models = {};
+  modelIds.forEach(modelId => {
+    const results = db.getResultsByModel(modelId);
+
+    // 转换为原有格式：{batchId: {success, latency, error, timestamp}}
+    const resultsByBatch = {};
+    results.forEach(r => {
+      resultsByBatch[r.batch_id] = {
+        success: r.success === 1,
+        latency: r.latency,
+        error: r.error,
+        timestamp: r.timestamp
+      };
+    });
+
+    models[modelId] = {
+      id: modelId,
+      results: resultsByBatch
+    };
+  });
+
+  // 获取最新更新时间
+  const lastUpdate = batches.length > 0 ? batches[0].timestamp : null;
+
+  return {
+    lastUpdate: lastUpdate,
+    batches: batchList,
+    models: models
+  };
+}
+
+/**
+ * 清理过期数据
+ * @param {number} retentionDays - 保留天数（默认 14 天）
+ * @returns {Object} 清理统计
+ */
+function cleanupOldData(retentionDays = 14) {
+  const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const stats = db.cleanupOldData(cutoffTime);
+
+  console.log(`清理完成: 删除 ${stats.deletedBatches} 个批次，${stats.deletedResults} 条检测记录`);
+  return stats;
 }
 
 module.exports = {
   createBatch,
   updateModelResult,
-  getAllStatus
+  getAllStatus,
+  cleanupOldData
 };

@@ -5,9 +5,10 @@
  */
 
 const { checkAllModels } = require('./checker');
-const { createBatch, updateModelResult } = require('./storage');
+const { createBatch, updateModelResult, cleanupOldData } = require('./storage');
 
-let timeoutId = null;
+let checkTimeoutId = null;
+let cleanupTimeoutId = null;
 let isChecking = false; // 检测进行中标志
 
 /**
@@ -82,14 +83,62 @@ function scheduleNextCheck() {
   console.log(`下一轮检测将在 ${intervalMinutes} 分钟后开始`);
 
   // 清除旧的定时器
-  if (timeoutId) {
-    clearTimeout(timeoutId);
+  if (checkTimeoutId) {
+    clearTimeout(checkTimeoutId);
   }
 
   // 设置新的定时器
-  timeoutId = setTimeout(() => {
+  checkTimeoutId = setTimeout(() => {
     runCheckTask();
   }, intervalMs);
+}
+
+/**
+ * 执行数据清理任务
+ */
+function runCleanupTask() {
+  const retentionDays = parseInt(process.env.DATA_RETENTION_DAYS) || 14;
+  console.log(`[${new Date().toLocaleString('zh-CN')}] 开始清理 ${retentionDays} 天前的数据`);
+
+  try {
+    const stats = cleanupOldData(retentionDays);
+    console.log(`清理完成: 删除了 ${stats.deletedBatches} 个批次，${stats.deletedResults} 条检测记录`);
+  } catch (error) {
+    console.error('数据清理失败:', error.message);
+  }
+
+  // 安排下一次清理（每天凌晨 3 点执行）
+  scheduleNextCleanup();
+}
+
+/**
+ * 安排下一次数据清理
+ */
+function scheduleNextCleanup() {
+  // 计算距离明天凌晨 3 点的时间
+  const now = new Date();
+  const next = new Date();
+  next.setHours(3, 0, 0, 0);
+
+  // 如果今天的 3 点已经过了，设置为明天 3 点
+  if (next <= now) {
+    next.setDate(next.getDate() + 1);
+  }
+
+  const delayMs = next.getTime() - now.getTime();
+  const delayHours = Math.round(delayMs / 1000 / 60 / 60);
+
+  console.log(`下一次数据清理将在 ${delayHours} 小时后执行（${next.toLocaleString('zh-CN')}）`);
+
+  // 清除旧的定时器
+  if (cleanupTimeoutId) {
+    clearTimeout(cleanupTimeoutId);
+  }
+
+  // 设置新的定时器
+  cleanupTimeoutId = setTimeout(() => {
+    runCleanupTask();
+  }, delayMs);
 }
 
 /**
@@ -100,19 +149,28 @@ function startScheduler() {
 
   console.log(`定时任务已启动，每轮检测完成后等待 ${intervalMinutes} 分钟再开始下一轮`);
 
-  // 立即执行第一次
+  // 立即执行第一次检测
   runCheckTask();
+
+  // 启动数据清理任务
+  scheduleNextCleanup();
 }
 
 /**
  * 停止定时任务
  */
 function stopScheduler() {
-  if (timeoutId) {
-    clearTimeout(timeoutId);
-    timeoutId = null;
-    console.log('定时任务已停止');
+  if (checkTimeoutId) {
+    clearTimeout(checkTimeoutId);
+    checkTimeoutId = null;
   }
+
+  if (cleanupTimeoutId) {
+    clearTimeout(cleanupTimeoutId);
+    cleanupTimeoutId = null;
+  }
+
+  console.log('定时任务已停止');
 }
 
 module.exports = {
