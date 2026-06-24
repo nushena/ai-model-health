@@ -14,16 +14,56 @@ const client = new OpenAI({
   }
 });
 
-// 最小测试消息池（随机选择以避免被识别为固定模式）
-const TEST_MESSAGES = [
-  'hi',
-  'ok',
-  '1+1=?',
-  '测试',
-  'hello',
-  'test',
-  '你好',
-  'ping'
+// 测试问题池（多样化的正常问题，避免被识别为无意义测试）
+const TEST_QUESTIONS = [
+  // 英文单词/短语
+  'who', 'hello', 'what time', 'hi there', 'ok', 'yes', 'thanks', 'good',
+
+  // 中文日常问候
+  '天气', '自我介绍', '今天星期几', '你好', '介绍一下', '早上好',
+  '现在几点', '帮忙', '谢谢', '在吗', '晚安', '午安', '怎么样',
+
+  // 中文常见问题
+  '推荐', '建议', '帮我看看', '可以吗', '行不行', '说说', '讲讲',
+  '解释下', '咋办', '怎么做', '哪个好', '选哪个',
+
+  // 英文常见问题
+  'why', 'how', 'when', 'where', 'which one', 'tell me', 'show me',
+  'explain', 'help me', 'any ideas', 'what about', 'can you',
+
+  // 简单数学问题
+  '1+1', '2*3', '5-2', '10-3', '4+5',
+
+  // 日常话题
+  '电影', '音乐', '书', '游戏', '美食', '旅游', '运动',
+
+  // 表情符号（部分模型支持）
+  '👋', '🌤️', '🤔', '😊', '👍', '🎉', '💡', '❓'
+];
+
+// System Prompt 池（随机选择，增加多样性）
+const SYSTEM_PROMPTS = [
+  // 复读类（中英文）
+  '你必须原样重复用户说的话，不要添加任何其他内容。',
+  'Repeat exactly what the user says, nothing more.',
+  '请直接复述用户的输入。',
+  'Echo back the user input directly.',
+
+  // 简短回复类（中英文）
+  '请简短回答用户的问题，不超过 5 个字。',
+  'Answer briefly in 5 words or less.',
+  '用最少的字回复。',
+  'Reply with minimal words.',
+  '一句话回答即可。',
+  'Answer in one short sentence.',
+
+  // 简洁风格类（中英文）
+  '用最简洁的方式回复用户。',
+  'Reply to the user as concisely as possible.',
+  '简洁明了地回复。',
+  'Be concise and clear.',
+  '直截了当地回答。',
+  'Answer directly and briefly.'
 ];
 
 /**
@@ -35,11 +75,19 @@ function getRandomDelay() {
 }
 
 /**
- * 从消息池中随机选择一条测试消息
- * @returns {string} 随机选中的测试消息
+ * 从问题池中随机选择一个测试问题
+ * @returns {string} 随机选中的测试问题
  */
-function getRandomTestMessage() {
-  return TEST_MESSAGES[Math.floor(Math.random() * TEST_MESSAGES.length)];
+function getRandomTestQuestion() {
+  return TEST_QUESTIONS[Math.floor(Math.random() * TEST_QUESTIONS.length)];
+}
+
+/**
+ * 从 System Prompt 池中随机选择一个
+ * @returns {string} 随机选中的 System Prompt
+ */
+function getRandomSystemPrompt() {
+  return SYSTEM_PROMPTS[Math.floor(Math.random() * SYSTEM_PROMPTS.length)];
 }
 
 /**
@@ -77,7 +125,8 @@ async function getAvailableModels() {
  */
 async function checkModel(modelId) {
   const startTime = Date.now();
-  const testMessage = getRandomTestMessage();
+  const testQuestion = getRandomTestQuestion();
+  const systemPrompt = getRandomSystemPrompt();
 
   try {
     // 设置 30 秒超时
@@ -85,19 +134,47 @@ async function checkModel(modelId) {
       setTimeout(() => reject(new Error('请求超时（30秒）')), 30000);
     });
 
-    const requestPromise = client.chat.completions.create({
-      model: modelId,
-      max_tokens: Math.floor(Math.random() * 5) + 1, // 1-5 随机 token
-      messages: [
-        {
-          role: 'user',
-          content: testMessage
+    let requestPromise;
+
+    // 针对不同类型的模型使用不同的检测策略
+    if (modelId.includes('embedding') || modelId.includes('ada')) {
+      // Embedding 模型：使用轻量的 embeddings API
+      requestPromise = client.embeddings.create({
+        model: modelId,
+        input: testQuestion
+      });
+    } else {
+      // Chat 模型：使用随机 system prompt + 流式响应
+      requestPromise = (async () => {
+        const stream = await client.chat.completions.create({
+          model: modelId,
+          max_tokens: 10,  // 给足够空间回复（中文可能需要多个 token）
+          temperature: 0,
+          stream: true,
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: testQuestion
+            }
+          ]
+        });
+
+        // 只等待第一个有内容的 chunk（TTFT）
+        for await (const chunk of stream) {
+          if (chunk.choices?.[0]?.delta?.content) {
+            // 收到第一个内容 token，证明模型在线，立即返回
+            return chunk;
+          }
         }
-      ]
-    });
+      })();
+    }
 
     // 使用 Promise.race 实现超时控制
-    const response = await Promise.race([requestPromise, timeoutPromise]);
+    await Promise.race([requestPromise, timeoutPromise]);
 
     const latency = Date.now() - startTime;
 
@@ -106,7 +183,8 @@ async function checkModel(modelId) {
       latency: latency,
       error: null,
       timestamp: Date.now(),
-      testMessage: testMessage
+      testQuestion: testQuestion,
+      systemPrompt: systemPrompt
     };
   } catch (error) {
     const latency = Date.now() - startTime;
@@ -116,7 +194,8 @@ async function checkModel(modelId) {
       latency: latency,
       error: error.message,
       timestamp: Date.now(),
-      testMessage: testMessage
+      testQuestion: testQuestion,
+      systemPrompt: systemPrompt
     };
   }
 }
