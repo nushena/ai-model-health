@@ -1,0 +1,22 @@
+# 忽略 Node.js 依赖
+node_modules/
+
+# 忽略环境变量文件
+.env
+
+# 忽略数据库文件（使用 volume 挂载）
+server/data/*.db
+server/data/*.db-*
+
+# 忽略日志文件
+*.log
+npm-debug.log*
+
+# 忽略 Git 文件
+.git/
+.gitignore
+
+# 忽略临时文件
+*.tmp
+*.swp
+.DS_Store

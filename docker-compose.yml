@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  ai-model-monitor:
+    build: .
+    container_name: ai-model-monitor
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - CHECK_INTERVAL_MINUTES=${CHECK_INTERVAL_MINUTES:-5}
+      - PORT=3000
+      - DATA_RETENTION_DAYS=${DATA_RETENTION_DAYS:-14}
+    volumes:
+      - ./server/data:/app/server/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
