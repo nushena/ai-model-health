@@ -117,7 +117,11 @@ function updateStats(summary) {
 }
 
 // 创建历史请求可视化（按批次对齐）
-function createHistoryBars(history, maxBars = 50) {
+function createHistoryBars(history) {
+  // 根据屏幕宽度动态决定显示数量
+  const isMobile = window.innerWidth <= 768;
+  const maxBars = isMobile ? 20 : 50;
+
   const bars = [];
 
   if (!history || history.length === 0) {
