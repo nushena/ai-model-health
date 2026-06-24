@@ -1,0 +1,18 @@
+{
+  "name": "ai-model-health-monitor",
+  "version": "1.0.0",
+  "description": "轻量级 AI 模型健康监控系统",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "keywords": ["ai", "monitoring", "openai"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^4.20.0",
+    "express": "^4.18.2",
+    "dotenv": "^16.3.1"
+  }
+}

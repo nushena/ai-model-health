@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 助手状态监控</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 顶部横幅 -->
+    <header class="header">
+      <h1>AI 助手运行状态</h1>
+      <div id="overall-banner" class="banner banner-loading">
+        <span class="banner-icon">⏳</span>
+        <span class="banner-text">正在检查状态...</span>
+      </div>
+      <p class="header-note">页面每 30 秒自动刷新 · 绿色=成功 · 红色=失败 · 灰色=无数据</p>
+    </header>
+
+    <!-- 统计概览 -->
+    <section class="stats">
+      <div class="stat-card">
+        <div class="stat-label">总计</div>
+        <div class="stat-value" id="stat-total">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">在线</div>
+        <div class="stat-value stat-success" id="stat-online">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">离线</div>
+        <div class="stat-value stat-error" id="stat-offline">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">整体健康度</div>
+        <div class="stat-value" id="stat-health">-</div>
+      </div>
+    </section>
+
+    <!-- 模型列表 -->
+    <section class="models">
+      <h2>各助手详细状态</h2>
+      <div id="models-list" class="models-list">
+        <!-- 由 JavaScript 动态生成 -->
+      </div>
+    </section>
+
+    <!-- 最后更新时间 -->
+    <footer class="footer">
+      <p id="last-update">最后更新: --</p>
+    </footer>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
