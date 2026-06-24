@@ -122,12 +122,12 @@ function upsertResult(batchId, modelId, result) {
 }
 
 /**
- * 获取所有批次（按时间倒序）
+ * 获取所有批次（按时间正序）
  * @returns {Array} 批次列表
  */
 function getAllBatches() {
   const db = getDatabase();
-  const stmt = db.prepare('SELECT id, timestamp FROM batches ORDER BY timestamp DESC');
+  const stmt = db.prepare('SELECT id, timestamp FROM batches ORDER BY timestamp ASC');
   return stmt.all();
 }
 
