@@ -3,6 +3,107 @@
  * 负责从后端获取数据并更新页面显示
  */
 
+// ==================== 主题切换功能 ====================
+const THEME_MODES = {
+  AUTO: 'auto',
+  LIGHT: 'light',
+  DARK: 'dark'
+};
+
+const THEME_TEXTS = {
+  auto: '自动切换',
+  light: '白天模式',
+  dark: '夜晚模式'
+};
+
+// 获取当前主题模式
+function getCurrentThemeMode() {
+  return localStorage.getItem('themeMode') || THEME_MODES.AUTO;
+}
+
+// 保存主题模式
+function saveThemeMode(mode) {
+  localStorage.setItem('themeMode', mode);
+}
+
+// 判断当前是否应该是白天（7:00-17:00）
+function isDaytime() {
+  const now = new Date();
+  const hour = now.getHours();
+  return hour >= 7 && hour < 17;
+}
+
+// 应用主题
+function applyTheme(mode) {
+  const html = document.documentElement;
+
+  if (mode === THEME_MODES.AUTO) {
+    // 自动模式：根据时间判断
+    if (isDaytime()) {
+      html.classList.add('light-mode');
+    } else {
+      html.classList.remove('light-mode');
+    }
+  } else if (mode === THEME_MODES.LIGHT) {
+    // 强制白天模式
+    html.classList.add('light-mode');
+  } else {
+    // 强制夜晚模式
+    html.classList.remove('light-mode');
+  }
+}
+
+// 切换到下一个主题模式
+function toggleTheme() {
+  const currentMode = getCurrentThemeMode();
+  let nextMode;
+
+  // 循环切换：自动 -> 白天 -> 夜晚 -> 自动
+  if (currentMode === THEME_MODES.AUTO) {
+    nextMode = THEME_MODES.LIGHT;
+  } else if (currentMode === THEME_MODES.LIGHT) {
+    nextMode = THEME_MODES.DARK;
+  } else {
+    nextMode = THEME_MODES.AUTO;
+  }
+
+  saveThemeMode(nextMode);
+  applyTheme(nextMode);
+  updateThemeButtonText(nextMode);
+}
+
+// 更新按钮文字
+function updateThemeButtonText(mode) {
+  const themeText = document.getElementById('theme-text');
+  if (themeText) {
+    themeText.textContent = THEME_TEXTS[mode];
+  }
+}
+
+// 初始化主题
+function initTheme() {
+  const mode = getCurrentThemeMode();
+  applyTheme(mode);
+  updateThemeButtonText(mode);
+
+  // 绑定按钮点击事件
+  const themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', toggleTheme);
+  }
+
+  // 如果是自动模式，每分钟检查一次时间
+  if (mode === THEME_MODES.AUTO) {
+    setInterval(() => {
+      if (getCurrentThemeMode() === THEME_MODES.AUTO) {
+        applyTheme(THEME_MODES.AUTO);
+      }
+    }, 60000); // 每分钟检查一次
+  }
+}
+
+// ==================== 模型监控功能 ====================
+
 // 模型友好名称映射（将技术名称转换为易懂的别名）
 // 由于模型是动态获取的，这里只为常见模型提供友好名称
 // 未匹配的模型将直接显示原始 ID
@@ -277,6 +378,10 @@ async function fetchStatus() {
 
 // 页面加载完成后立即执行一次
 document.addEventListener('DOMContentLoaded', () => {
+  // 初始化主题
+  initTheme();
+
+  // 获取状态数据
   fetchStatus();
 
   // 每 30 秒自动刷新一次

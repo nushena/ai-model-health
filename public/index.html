@@ -8,8 +8,29 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <!-- 立即应用主题，避免闪烁 -->
+  <script>
+    (function() {
+      const themeMode = localStorage.getItem('themeMode') || 'auto';
+      const isDaytime = function() {
+        const hour = new Date().getHours();
+        return hour >= 7 && hour < 17;
+      };
+
+      if (themeMode === 'light' || (themeMode === 'auto' && isDaytime())) {
+        document.documentElement.classList.add('light-mode');
+      }
+    })();
+  </script>
 </head>
 <body>
+  <!-- 主题切换按钮 -->
+  <div class="theme-toggle-wrapper">
+    <button id="theme-toggle" class="theme-toggle-btn" aria-label="切换主题">
+      <span id="theme-text">自动切换</span>
+    </button>
+  </div>
+
   <div class="container">
     <!-- 顶部横幅 -->
     <header class="header">
