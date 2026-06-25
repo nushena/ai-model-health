@@ -48,6 +48,7 @@ function getAllStatus() {
   const batchList = batches.map(batch => ({
     id: batch.id,
     timestamp: batch.timestamp,
+    isCompleted: batch.is_completed === 1,
     modelIds: db.getModelIdsByBatch(batch.id)
   }));
 
@@ -99,9 +100,67 @@ function cleanupOldData(retentionDays = 14) {
   return stats;
 }
 
+/**
+ * 标记批次为已完成
+ * @param {string} batchId - 批次 ID
+ */
+function completeBatch(batchId) {
+  db.completeBatch(batchId);
+  console.log(`批次标记为已完成: ${batchId}`);
+}
+
+/**
+ * 检查并清理连续离线的模型
+ * 如果模型在最近的所有批次中都未被检测（离线状态），则删除该模型
+ * @param {number} consecutiveOfflineThreshold - 连续离线次数阈值（默认 15 次）
+ * @returns {Array} 被删除的模型 ID 列表
+ */
+function cleanupOfflineModels(consecutiveOfflineThreshold = 15) {
+  const deletedModels = [];
+
+  // 获取所有批次（按时间倒序，取最近的 N 次）
+  const allBatches = db.getAllBatches();
+  const recentBatches = allBatches.slice(-consecutiveOfflineThreshold);
+
+  // 如果批次数不足阈值，跳过清理
+  if (recentBatches.length < consecutiveOfflineThreshold) {
+    return deletedModels;
+  }
+
+  // 获取所有模型
+  const modelIds = db.getAllModelIds();
+
+  modelIds.forEach(modelId => {
+    // 检查该模型在最近 N 个批次中是否都没有检测记录
+    let offlineCount = 0;
+
+    for (const batch of recentBatches) {
+      const result = db.getResult(modelId, batch.id);
+      if (!result) {
+        // 没有检测记录，计为离线
+        offlineCount++;
+      } else {
+        // 有检测记录，跳出检查
+        break;
+      }
+    }
+
+    // 如果连续 N 次都离线，删除该模型
+    if (offlineCount === consecutiveOfflineThreshold) {
+      const deletedCount = db.deleteModel(modelId);
+      deletedModels.push(modelId);
+      console.log(`删除连续 ${consecutiveOfflineThreshold} 次离线的模型: ${modelId}（删除 ${deletedCount} 条记录）`);
+    }
+  });
+
+  return deletedModels;
+}
+
 module.exports = {
   createBatch,
   updateModelResult,
   getAllStatus,
-  cleanupOldData
+  cleanupOldData,
+  completeBatch,
+  cleanupOfflineModels
 };

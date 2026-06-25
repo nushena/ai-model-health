@@ -44,34 +44,50 @@ app.get('/api/status', (req, res) => {
             success: result.success,
             latency: result.latency,
             error: result.error,
-            timestamp: result.timestamp
+            timestamp: result.timestamp,
+            status: result.success ? 'success' : 'failed'
           });
-        } else {
-          // 没有检测结果，占位
+        } else if (batch.isCompleted) {
+          // 批次已完成但没有检测结果，标记为"离线"（模型不在该批次列表中）
           history.push({
             success: null,
             latency: null,
             error: null,
-            timestamp: batch.timestamp
+            timestamp: batch.timestamp,
+            status: 'offline'
+          });
+        } else {
+          // 批次未完成，不显示该记录（等待检测）
+          history.push({
+            success: null,
+            latency: null,
+            error: null,
+            timestamp: batch.timestamp,
+            status: 'pending'
           });
         }
       });
 
       // 计算统计数据
-      const validResults = history.filter(h => h.success !== null);
-      const successCount = validResults.filter(h => h.success).length;
-      const availabilityRate = validResults.length > 0
-        ? (successCount / validResults.length * 100).toFixed(2)
+      // 成功率 = 成功次数 / 总批次数（离线计入分母）
+      const totalCount = history.length;
+      const successCount = history.filter(h => h.success === true).length;
+      const failedCount = history.filter(h => h.success === false).length;
+      const offlineCount = history.filter(h => h.status === 'offline').length;
+
+      const availabilityRate = totalCount > 0
+        ? (successCount / totalCount * 100).toFixed(2)
         : 0;
 
       // 计算平均延迟（只统计成功的请求）
-      const successResults = validResults.filter(h => h.success && h.latency);
+      const successResults = history.filter(h => h.success && h.latency);
       const avgLatency = successResults.length > 0
         ? Math.round(successResults.reduce((sum, h) => sum + h.latency, 0) / successResults.length)
         : 0;
 
       // 最新状态
-      const latestResult = validResults[validResults.length - 1];
+      const testedResults = history.filter(h => h.status !== 'offline');
+      const latestResult = testedResults[testedResults.length - 1];
       const isOnline = latestResult ? latestResult.success : false;
       const latency = latestResult ? latestResult.latency : null;
       const error = latestResult ? latestResult.error : null;
@@ -86,9 +102,10 @@ app.get('/api/status', (req, res) => {
         availabilityRate: parseFloat(availabilityRate),
         error: error,
         history: history,
-        requestCount: validResults.length,
+        requestCount: totalCount,
         successCount: successCount,
-        errorCount: validResults.length - successCount
+        errorCount: failedCount,
+        offlineCount: offlineCount
       };
     });
 

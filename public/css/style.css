@@ -81,6 +81,10 @@ html.light-mode .history-bar.empty {
   background: #E7E3DA;
 }
 
+html.light-mode .history-bar.offline {
+  background: #9ca3af;
+}
+
 html.light-mode .footer {
   color: #6B7077;
 }
@@ -413,6 +417,10 @@ html.light-mode .theme-toggle-btn:hover {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
 }
 
+.history-bar.offline {
+  background: #4b5563;
+}
+
 .history-bar.empty {
   background: #353943;
 }
@@ -424,6 +432,10 @@ html.light-mode .theme-toggle-btn:hover {
 
 .history-bar.error:hover {
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+}
+
+.history-bar.offline:hover {
+  box-shadow: 0 0 12px rgba(75, 85, 99, 0.6);
 }
 
 /* 响应式优化 - 移动端降低动画 */

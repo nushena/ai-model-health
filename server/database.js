@@ -37,7 +37,8 @@ function initDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS batches (
       id TEXT PRIMARY KEY,
-      timestamp INTEGER NOT NULL
+      timestamp INTEGER NOT NULL,
+      is_completed INTEGER DEFAULT 0
     )
   `);
 
@@ -127,7 +128,7 @@ function upsertResult(batchId, modelId, result) {
  */
 function getAllBatches() {
   const db = getDatabase();
-  const stmt = db.prepare('SELECT id, timestamp FROM batches ORDER BY timestamp ASC');
+  const stmt = db.prepare('SELECT id, timestamp, is_completed FROM batches ORDER BY timestamp ASC');
   return stmt.all();
 }
 
@@ -240,6 +241,46 @@ function getDatabaseStats() {
 }
 
 /**
+ * 标记批次为已完成
+ * @param {string} batchId - 批次 ID
+ */
+function completeBatch(batchId) {
+  const db = getDatabase();
+  const stmt = db.prepare('UPDATE batches SET is_completed = 1 WHERE id = ?');
+  stmt.run(batchId);
+}
+
+/**
+ * 删除指定模型的所有记录
+ * @param {string} modelId - 模型 ID
+ * @returns {number} 删除的记录数
+ */
+function deleteModel(modelId) {
+  const db = getDatabase();
+  const stmt = db.prepare('DELETE FROM results WHERE model_id = ?');
+  const info = stmt.run(modelId);
+  return info.changes;
+}
+
+/**
+ * 获取指定模型最近 N 次的检测状态
+ * @param {string} modelId - 模型 ID
+ * @param {number} limit - 获取的记录数
+ * @returns {Array} 最近的检测结果列表
+ */
+function getRecentResults(modelId, limit) {
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    SELECT success, timestamp
+    FROM results
+    WHERE model_id = ?
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `);
+  return stmt.all(modelId, limit);
+}
+
+/**
  * 关闭数据库连接
  */
 function closeDatabase() {
@@ -262,5 +303,8 @@ module.exports = {
   getResult,
   cleanupOldData,
   getDatabaseStats,
+  completeBatch,
+  deleteModel,
+  getRecentResults,
   closeDatabase
 };

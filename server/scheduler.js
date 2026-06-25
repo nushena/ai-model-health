@@ -5,7 +5,7 @@
  */
 
 const { checkAllModels } = require('./checker');
-const { createBatch, updateModelResult, cleanupOldData } = require('./storage');
+const { createBatch, updateModelResult, cleanupOldData, completeBatch, cleanupOfflineModels } = require('./storage');
 
 let checkTimeoutId = null;
 let cleanupTimeoutId = null;
@@ -63,6 +63,17 @@ async function runCheckTask() {
 
     const duration = Math.round((Date.now() - startTime) / 1000);
     console.log(`检测完成: ${successCount}/${results.length} 个模型在线，耗时 ${duration} 秒`);
+
+    // 标记批次为已完成
+    if (batchId) {
+      completeBatch(batchId);
+    }
+
+    // 检测完成后，清理连续离线的模型
+    const deletedModels = cleanupOfflineModels(15);
+    if (deletedModels.length > 0) {
+      console.log(`自动清理: 删除了 ${deletedModels.length} 个连续 15 次离线的模型`);
+    }
   } catch (error) {
     console.error('检测任务执行失败:', error.message);
   } finally {

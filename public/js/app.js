@@ -240,17 +240,31 @@ function createHistoryBars(history) {
     // 只显示最近的 maxBars 条记录
     const recentHistory = history.slice(-maxBars);
     recentHistory.forEach(record => {
-      // success 为 null 表示该批次没有检测这个模型（占位）
-      if (record.success === null) {
-        bars.push('<div class="history-bar empty" data-tooltip="未检测"></div>');
-      } else {
-        const barClass = record.success ? 'success' : 'error';
-        const statusText = record.success ? '✓ 成功' : '✗ 失败';
+      if (record.status === 'offline') {
+        // 离线状态：模型不在该批次列表中
+        const timeText = formatTimeExact(record.timestamp);
+        const tooltip = `未检测 | ${timeText} | 模型已离线`;
+        bars.push(`<div class="history-bar offline" data-tooltip="${tooltip}"></div>`);
+      } else if (record.status === 'pending') {
+        // 等待检测状态：批次未完成
+        const timeText = formatTimeExact(record.timestamp);
+        const tooltip = `等待检测 | ${timeText}`;
+        bars.push(`<div class="history-bar empty" data-tooltip="${tooltip}"></div>`);
+      } else if (record.status === 'success') {
+        // 成功状态
         const timeText = formatTimeExact(record.timestamp);
         const latencyText = record.latency ? `${record.latency}ms` : '-';
-        const tooltip = `${statusText} | ${timeText} | ${latencyText}`;
-
-        bars.push(`<div class="history-bar ${barClass}" data-tooltip="${tooltip}"></div>`);
+        const tooltip = `✓ 成功 | ${timeText} | ${latencyText}`;
+        bars.push(`<div class="history-bar success" data-tooltip="${tooltip}"></div>`);
+      } else if (record.status === 'failed') {
+        // 失败状态
+        const timeText = formatTimeExact(record.timestamp);
+        const errorText = friendlyErrorMessage(record.error);
+        const tooltip = `✗ 失败 | ${timeText} | ${errorText}`;
+        bars.push(`<div class="history-bar error" data-tooltip="${tooltip}"></div>`);
+      } else {
+        // 兼容旧数据格式
+        bars.push('<div class="history-bar empty"></div>');
       }
     });
   }
